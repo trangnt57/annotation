@@ -7,7 +7,7 @@ Created on Tue Mar 13 16:56:50 2018
 import re
 
 #list of operators 
-token = [' ', '~', '+', '-', '*', '/', '%', '&', '|', '>', '>', '^', '(', ')', '>>', '<<']
+token = [' ', '~', '+', '-', '*', '/', '%', '&', '|', '>', '>', '^', '(', ')', '>>', '<<', '=']
 #list of biswise operators
 bitwise_token = ['~', '&', '|', '>>', '<<']
 #list of rules which has function for generating annotation
@@ -62,8 +62,8 @@ def pre_prosessing(s):
         dist_of_array = dictionary_of_array(s)
         for k in dist_of_array:
             s = s.replace(dist_of_array.get(k), k)
-    
     if ("!=" not in s) and ("==" not in s):
+       
         #Convert expression from a += b to a = a + b
         operator = ["~=", ">>=", "<<=", "&=", "^=", "|=", "/="]
         temp = []
@@ -79,6 +79,7 @@ def pre_prosessing(s):
                     temp = re.split(operator[i], s)
                     op = operator[i]
                 break
+       
         #op has form '+='     
         if(len(temp) > 0):
             op = re.split('=', op)
@@ -86,8 +87,9 @@ def pre_prosessing(s):
             #temp[0] = a
             #op[0] = '+'
             #temp[1] = b
-            s = temp[0] + op[0] + "(" + temp[1] + ")"
-            
+            s = temp[0] + op[0] + " (" + temp[1] + ")"
+        print("test")
+        print(s)    
         #convert expression from a = a+b to a+b (remove left side accoding to '=' operator)
         if '=' in s:
             temp = re.split('=', s)
@@ -98,20 +100,8 @@ def pre_prosessing(s):
     new_exp = ""
     for i in range(len(s)):
         if s[i] in token:
-            #case operator is ">>" or "<<"
-            if (s[i] == '>' and s[i+1] == '>') or (s[i] == '<' and s[i+1] == '<'):
-                new_exp += s[i]
-                continue
-            #case p->a
-            elif s[i] == '-' and s[i+1] == '>':
-                new_exp += s[i]
-                continue
-            #case operator is "!="
-            elif s[i] == '!' and s[i+1] == '=':
-                new_exp += s[i]
-                continue
-            #case operator is "=="
-            elif s[i] == '=' and s[i+1] == '=':
+            #case ">>", '<<', '!=', '&&', '==', '->'...
+            if (s[i] in token) and (i + 1 < len(s)) and (s[i + 1] in token):
                 new_exp += s[i]
                 continue
             else:
@@ -396,6 +386,7 @@ def read_output_of_rosecheckers(rosecheckers_output_file_name):
 def write_annotations_to_file(list_of_violations, source):
     for key in list_of_violations:
         file_name = source + key
+        print(file_name)
         violation_positions = list_of_violations.get(key)
         original_file = open(file_name, "r", errors = 'ignore')
         tmp = str(key).split('/')
@@ -431,10 +422,10 @@ def write_annotations_to_file(list_of_violations, source):
                             s = line
                         else:
                             s = line
-                       
+                        print(s)
                         #s is expression that need to be generated annotation
                         pre_prosessed = pre_prosessing(s)
-                        
+                        print(pre_prosessed)
                         post_prefix_expression = expression_to_posprefix(pre_prosessed)
                         expression_tree = postprefix_to_expression_tree(post_prefix_expression)
                         #decide which rule to generate annotation for s 
@@ -484,7 +475,7 @@ def write_annotations_to_file(list_of_violations, source):
         generated_file.close() 
 
 #main
-rosecheckers_output_file_name = "rosecheckers_output.txt"        
+rosecheckers_output_file_name = "C:/Users/nguye/Google Drive/JAIST/Project/code/rosecheckers_output.txt"        
 source = "C:/Users/nguye/Google Drive/JAIST/Project/code/atk2-sc1_arm/"        
 list_of_violations = read_output_of_rosecheckers(rosecheckers_output_file_name)
 write_annotations_to_file(list_of_violations, source)
