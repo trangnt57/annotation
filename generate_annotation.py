@@ -13,12 +13,24 @@ bitwise_token = ['~', '&', '|', '>>', '<<']
 #list of rules which has function for generating annotation
 list_of_rules = ['int13', 'int33', 'int34']
 
-def containArray(s):
+#contain_array function
+#input: string s
+#output: Boolean
+#check if an expression contain arrays or not 
+#for example s = A[b % c] -> return True
+def contain_array(s):
     for i in range(len(s)):
         if(s[i] == '['):
             return True
     return False
 
+#dictionary_array_function
+#input: string
+#output: dictionary
+#add all array variables of the expression into dictionary
+#for example:
+#s = A[b%c] + E[b%d]
+#dict_of_array = {'A_0':'A[b%c]', 'A_1':'E[b%d]'}    
 def dictionary_of_array(s):
     dict_of_array = {}
     key = 'A_'
@@ -48,7 +60,7 @@ def dictionary_of_array(s):
 #example:
 #input: s = "s = s >> 2 + 3 * 4;"
 #output: ['s', '>>', '2', '+', '3', '4']
-def pre_prosessing(s):
+def pre_processing(s):
     #remove some special characters from string
     s = s.replace('\n', ' ')
     s = s.replace('\t', ' ')
@@ -57,11 +69,11 @@ def pre_prosessing(s):
     s = s.replace('if', ' ')
     s = s.replace('while', ' ')
     s = s.replace(';', ' ')
-    dist_of_array = {}
-    if(containArray(s) == True):
-        dist_of_array = dictionary_of_array(s)
-        for k in dist_of_array:
-            s = s.replace(dist_of_array.get(k), k)
+    dict_of_array = {}
+    if(contain_array(s) == True):
+        dict_of_array = dictionary_of_array(s)
+        for k in dict_of_array:
+            s = s.replace(dict_of_array.get(k), k)
     if ("!=" not in s) and ("==" not in s):
        
         #Convert expression from a += b to a = a + b
@@ -100,13 +112,15 @@ def pre_prosessing(s):
     new_exp = ""
     for i in range(len(s)):
         if s[i] in token:
+            print(s[i])
             #case ">>", '<<', '!=', '&&', '==', '->'...
-            if (s[i] in token) and (i + 1 < len(s)) and (s[i + 1] in token):
+            if (s[i] in token) and (i + 1 < len(s)) and (s[i + 1] in token) and (s[i] != ')' and s[i] != '(' and s[i+1] != ')' and s[i+1] != '('):
                 new_exp += s[i]
                 continue
             else:
+                print("adffafd")
                 #adding white space before and after operator
-                if (s[i] == '>' and s[i-1] == '>') or (s[i] == '<' and s[i-1] == '<') or (s[i] == '>' and s[i-1] == '-'):
+                if (s[i] in token) and (i - 1 >= 0) and (s[i-1] in token) and (s[i] != ')' and s[i] != '(' and s[i-1] != ')' and s[i-1] != '('):
                     new_exp += s[i]
                 else:
                     if i > 0 and s[i - 1] != " ":
@@ -118,6 +132,7 @@ def pre_prosessing(s):
                     new_exp += " "
         else:
             new_exp += s[i]
+    print(new_exp)
     new_exp = new_exp.split(" ");
     
     # remove empty elements
@@ -126,7 +141,7 @@ def pre_prosessing(s):
         if new_exp[i] != '':
             list_of_elements.append(new_exp[i])
     for i in range(len(list_of_elements)):
-        v = dist_of_array.get(list_of_elements[i], -1)
+        v = dict_of_array.get(list_of_elements[i], -1)
         if v != -1:
             list_of_elements[i] = v
     return list_of_elements
@@ -185,18 +200,30 @@ class Tree:
         self.value = value
         self.left = None
         self.right = None
+        self.bitwise_operand = False
     #inorder_travel function
     #left parent right
     def inorder_travel(self):
-        s = "("
+        #s = "("
+        s = ""
         if self.left != None:
             s += self.left.inorder_travel() 
         s += str(self.value)
         if self.right != None:
             s += self.right.inorder_travel()
-        s += ")"
+        #s += ")"
         return str(s)
-    
+    #contain_operator function
+    #check whether a tree is an expression or just an operand
+    def contain_operator(self):
+        flag = False
+        if self.value in token:
+            flag = True
+        if flag == False and self.left != None:
+            flag = self.left.contain_operator()
+        if flag == False and self.right != None:
+            flag = self.right.contain_operator()
+        return flag
 #postprefix_to_expression_tree function
 #convert expression from postprefix format to tree format
 #input: list
@@ -223,13 +250,18 @@ def postprefix_to_expression_tree(p):
             if(p[i] == '~'):
                 if len(stack) > 0:
                     _right = stack.pop()
+                    _right.bitwise_operand = True
                     parent.right = _right
             else:
                 if len(stack) > 0:
                     _right = stack.pop()
+                    if parent.value in bitwise_token:
+                        _right.bitwise_operand = True
                     parent.right = _right
                 if len(stack) > 0:
                     _left = stack.pop()
+                    if parent.value in bitwise_token:
+                        _right.bitwise_operand = True
                     parent.left = _left
             stack.append(parent)
     return stack.pop()
@@ -246,11 +278,15 @@ def postprefix_to_expression_tree(p):
 def int13_generate_annotation(tree):
     annotation = "";
     #if node is a biswise operator, generate annotation for both left and right child of it
-    if tree.value in bitwise_token:
-        if tree.left != None:
-            annotation += "/*@ assert " + tree.left.inorder_travel() + " >= 0;*/ \n"
-        if tree.right != None:
-            annotation += "/*@ assert " + tree.right.inorder_travel() + " >= 0;*/ \n"
+    if tree.value in bitwise_token or tree.bitwise_operand == True:
+        if tree.left != None and tree.left.contain_operator() == False:
+            s = tree.left.inorder_travel()
+            if s.isdigit() == False:
+                annotation += "/*@ assert " + s + " >= 0;*/ \n"
+        if tree.right != None and tree.right.contain_operator() == False:
+            s = tree.right.inorder_travel()
+            if s.isdigit() == False:
+                annotation += "/*@ assert " + s + " >= 0;*/ \n"
     if tree.left != None:
         annotation += int13_generate_annotation(tree.left)
     if tree.right != None:
@@ -400,9 +436,9 @@ def write_annotations_to_file(list_of_violations, source):
         for l in data_file:
             #with each violation
             for i in range(len(violation_positions)):
-                dists = violation_positions[i]
+                dicts = violation_positions[i]
                 flag = True
-                for k in dists:
+                for k in dicts:
                     #if violated line equals to current line (line is being read)
                     if int(k) == num_of_line:
                         
@@ -424,22 +460,22 @@ def write_annotations_to_file(list_of_violations, source):
                             s = line
                         print(s)
                         #s is expression that need to be generated annotation
-                        pre_prosessed = pre_prosessing(s)
-                        print(pre_prosessed)
-                        post_prefix_expression = expression_to_posprefix(pre_prosessed)
+                        pre_processed = pre_processing(s)
+                        print(pre_processed)
+                        post_prefix_expression = expression_to_posprefix(pre_processed)
                         expression_tree = postprefix_to_expression_tree(post_prefix_expression)
                         #decide which rule to generate annotation for s 
-                        values = dists.get(k, -1)
+                        values = dicts.get(k, -1)
                         for v in values:
                             v = v.replace('-C','').lower()
                             if v in list_of_rules:
                                 annotation = eval(v + "_generate_annotation(expression_tree)")
                                 generated_file.write(annotation)
-                        if (containArray(s)):
+                        if (contain_array(s)):
                             dict_of_array = dictionary_of_array(s)
                             for kArray in dict_of_array:
                                 vArray = dict_of_array.get(kArray)
-                                if vArray in pre_prosessed:
+                                if vArray in pre_processed:
                                     j = 0
                                     sArray = ''
                                     while j < len(vArray):
@@ -454,7 +490,7 @@ def write_annotations_to_file(list_of_violations, source):
                                             j += 1
                                         else:
                                             break
-                                    sArray = pre_prosessing(sArray)
+                                    sArray = pre_processing(sArray)
                                     sArray = expression_to_posprefix(sArray)
                                     sArray = postprefix_to_expression_tree(sArray)
                                     for v in values:
@@ -479,3 +515,8 @@ rosecheckers_output_file_name = "C:/Users/nguye/Google Drive/JAIST/Project/code/
 source = "C:/Users/nguye/Google Drive/JAIST/Project/code/atk2-sc1_arm/"        
 list_of_violations = read_output_of_rosecheckers(rosecheckers_output_file_name)
 write_annotations_to_file(list_of_violations, source)
+s = "start &= ~(line_len - 1)";
+s = pre_processing(s)
+print(s)
+s = expression_to_posprefix(s)
+print(s)
