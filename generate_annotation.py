@@ -7,7 +7,7 @@ Created on Tue Mar 13 16:56:50 2018
 import re
 
 #list of operators 
-token = [' ', '~', '+', '-', '*', '/', '%', '&', '|', '>', '>', '^', '(', ')', '>>', '<<', '=', '!=', '==']
+token = [' ', '~', '+', '-', '*', '/', '%', '&', '|', '>', '<', '^', '(', ')', '>>', '<<', '!','=', '!=', '==']
 #list of biswise operators
 bitwise_token = ['~', '&', '|', '>>', '<<']
 #list of rules which has function for generating annotation
@@ -20,7 +20,6 @@ list_of_rules = ['int13', 'int33', 'int32', 'int34']
 def is_a_function_call(s):
     function_name = ''
     for i in range(len(s)):
-        #print(s[i])
         if s[i] == '(':
             break
         elif s[i] != ' ' and s[i] in token:
@@ -59,13 +58,15 @@ def dictionary_of_array(s):
             value = ''
             j = i
             while j >= 0:
-                if (s[j] not in token) or (s[j] != ' '):
+                if s[j] not in token:
                     j -= 1
                 else:
                     break
+            j += 1
             while j < len(s) and s[j] != ']':
                 value += s[j]
                 j += 1
+            
             value += s[j]
             i = j
             k = key + str(index)
@@ -85,6 +86,7 @@ def pre_processing(s):
     list_of_special_characters = ['\n', '\t', '{', '}', 'if', 'while', ';', 'signed', 'unsigned', 'uintptr', 'sintptr', 'int', 'long']
     for i in range(len(list_of_special_characters)):
         s = s.replace(list_of_special_characters[i], '')
+    
     dict_of_array = {}
     if(contain_array(s) == True):
         dict_of_array = dictionary_of_array(s)
@@ -120,7 +122,6 @@ def pre_processing(s):
         if '=' in s:
             temp = re.split('=', s)
             s = temp[1]
-    #case expession is used as index of an array Array[expression]
    
     #conver expression from string format to list    
     new_exp = ""
@@ -128,6 +129,8 @@ def pre_processing(s):
         if s[i] in token:
             #case ">>", '<<', '!=', '&&', '==', '->'...
             if (s[i] in token) and (i + 1 < len(s)) and (s[i + 1] in token) and (s[i] != ')' and s[i] != '(' and s[i+1] != ')' and s[i+1] != '('):
+                if(s[i] != '-' and s[i+1] != ' '):
+                    new_exp += " "
                 new_exp += s[i]
                 continue
             else:
@@ -144,17 +147,13 @@ def pre_processing(s):
                     new_exp += " "
         else:
             new_exp += s[i]
-   #print(new_exp)
+    print(new_exp)
     new_exp = new_exp.split(" ");
-    #print("new_exp")
-    #print(new_exp)
    
     list_of_elements = []
     for i in range(len(new_exp)):
         # remove function name
         if new_exp[i] is not token and i + 1 <  len(new_exp) and new_exp[i + 1] == '(':
-            #print(new_exp[i])
-            #print(new_exp[i+1])
             continue
         # remove empty elements
         if new_exp[i] != '':
@@ -163,7 +162,7 @@ def pre_processing(s):
         v = dict_of_array.get(list_of_elements[i], -1)
         if v != -1:
             list_of_elements[i] = v
-    #print(list_of_elements)
+    print(list_of_elements)
     return list_of_elements
 
 #epxression_to_postprefix function
@@ -296,8 +295,10 @@ def postprefix_to_expression_tree(p):
 #output:    /*@ assert (s) >= 0;*/
 #           /*@ assert ((2) + ( (3)* (4))) >= 0;*/    
 def int13_generate_annotation(tree):
+    print("int13")
     annotation = "";
     #if node is a biswise operator, generate annotation for both left and right child of it
+    print(tree.value)
     if tree.value in bitwise_token or tree.bitwise_operand == True:
         if tree.left != None and tree.left.contain_operator() == False:
             s = tree.left.inorder_travel()
@@ -338,7 +339,6 @@ def int33_generate_annotation(tree):
 #notes: Rosecheckers only checks unary negation case so this function just 
 #generate annotation for that case
 def int32_generate_annotation(tree):
-    print("int32 - function")
     annotation = ""
     #if node is a '-' operator and it has only right child
     if tree.value == '-' and tree.left == None and tree.right != None:
@@ -461,18 +461,13 @@ def read_output_of_rosecheckers(rosecheckers_output_file_name):
 #output: void
 #generate annotation for expression s
 def generate_annotation(file, key, value, s):    
-    print ("genreated function")
     pre_processed = pre_processing(s)
-    print("pre")
-    print (pre_processed)
     post_prefix_expression = expression_to_posprefix(pre_processed)
     expression_tree = postprefix_to_expression_tree(post_prefix_expression)
     #decide which rule to generate annotation for s 
     #values = dicts.get(key, -1)
     for v in value:
         v = v.replace('-C','').lower()
-        print("rule")
-        print (v)
         if v in list_of_rules:
             annotation = eval(v + "_generate_annotation(expression_tree)")
             file.write(annotation)
@@ -501,8 +496,6 @@ def generate_annotation(file, key, value, s):
                 for v in value:
                     v = v.replace('-C','').lower()
                     if v in list_of_rules:
-                        print("rule")
-                        print(v)
                         annotation = eval(v + "_generate_annotation(sArray)")
                         file.write(annotation)        
 
@@ -530,8 +523,6 @@ def write_annotations_to_file(list_of_violations, source):
             #with each violation
             for i in range(len(violation_positions)):
                 dicts = violation_positions[i]
-                print("dict")
-                print(dicts)
                 flag = True
                 for k in dicts:
                     #if violated line equals to current line (line is being read)
@@ -557,13 +548,13 @@ def write_annotations_to_file(list_of_violations, source):
                         #check if s is a function call or not
                         #if s is a function call, get all paramenter of that 
                         #function and consider each as an expression
-                        if (is_a_function_call(s) != ''):
+                        b = is_a_function_call(s)
+                        if (b != ''):
                             s = s.replace(b,'')
                             s = s.replace('\t', '')
                             s = s.replace(' ', '')
                             s = s[1: len(s)-2]
                             s = s.split(',')
-                            print(s)
                             for si in range(len(s)):
                                 generate_annotation(generated_file, k, dicts.get(k), s[si]) 
                         else:   
@@ -586,11 +577,4 @@ rosecheckers_output_file_name = "C:/Users/nguye/Google Drive/JAIST/Project/code/
 source = "C:/Users/nguye/Google Drive/JAIST/Project/code/atk2-sc1_arm/"        
 list_of_violations = read_output_of_rosecheckers(rosecheckers_output_file_name)
 write_annotations_to_file(list_of_violations, source)
-s = "convert((uintptr) (-val), 10U, raddec,width, TRUE, padzero, outputc);"
-b = is_a_function_call(s)
-print(b)
-s = s.replace(b,'')
-s = s[1: len(s)-2]
-s = s.split(',')
-print(s)
-print(b)
+
