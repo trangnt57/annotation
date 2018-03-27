@@ -7,12 +7,31 @@ Created on Tue Mar 13 16:56:50 2018
 import re
 
 #list of operators 
-token = [' ', '~', '+', '-', '*', '/', '%', '&', '|', '>', '>', '^', '(', ')', '>>', '<<', '=']
+token = [' ', '~', '+', '-', '*', '/', '%', '&', '|', '>', '>', '^', '(', ')', '>>', '<<', '=', '!=', '==']
 #list of biswise operators
 bitwise_token = ['~', '&', '|', '>>', '<<']
 #list of rules which has function for generating annotation
 list_of_rules = ['int13', 'int33', 'int34']
 
+#is_a_function_call
+#input: String s
+#output: string if string == '' it means s is not a function call 
+#check if a string is a function call or not
+def is_a_function_call(s):
+    function_name = ''
+    for i in range(len(s)):
+        print(s[i])
+        if s[i] == '(':
+            break
+        elif s[i] != ' ' and s[i] in token:
+            return ''
+        elif s[i] != ' ' and s[i] != '(':
+            function_name += s[i]
+       
+    if(len(function_name) > 0):
+        return function_name
+    return ''
+    
 #contain_array function
 #input: string s
 #output: Boolean
@@ -61,6 +80,7 @@ def dictionary_of_array(s):
 #input: s = "s = s >> 2 + 3 * 4;"
 #output: ['s', '>>', '2', '+', '3', '4']
 def pre_processing(s):
+    print(s)
     #remove some special characters from string
     s = s.replace('\n', ' ')
     s = s.replace('\t', ' ')
@@ -69,6 +89,12 @@ def pre_processing(s):
     s = s.replace('if', ' ')
     s = s.replace('while', ' ')
     s = s.replace(';', ' ')
+    s = s.replace('signed', '')
+    s = s.replace('unsigned', '')
+    s = s.replace('uintptr','')
+    s = s.replace('sintptr', '')
+    s = s.replace('int', '')
+    s = s.replace('long', '')
     dict_of_array = {}
     if(contain_array(s) == True):
         dict_of_array = dictionary_of_array(s)
@@ -100,8 +126,6 @@ def pre_processing(s):
             #op[0] = '+'
             #temp[1] = b
             s = temp[0] + op[0] + " (" + temp[1] + ")"
-        print("test")
-        print(s)    
         #convert expression from a = a+b to a+b (remove left side accoding to '=' operator)
         if '=' in s:
             temp = re.split('=', s)
@@ -112,13 +136,11 @@ def pre_processing(s):
     new_exp = ""
     for i in range(len(s)):
         if s[i] in token:
-            print(s[i])
             #case ">>", '<<', '!=', '&&', '==', '->'...
             if (s[i] in token) and (i + 1 < len(s)) and (s[i + 1] in token) and (s[i] != ')' and s[i] != '(' and s[i+1] != ')' and s[i+1] != '('):
                 new_exp += s[i]
                 continue
             else:
-                print("adffafd")
                 #adding white space before and after operator
                 if (s[i] in token) and (i - 1 >= 0) and (s[i-1] in token) and (s[i] != ')' and s[i] != '(' and s[i-1] != ')' and s[i-1] != '('):
                     new_exp += s[i]
@@ -134,16 +156,24 @@ def pre_processing(s):
             new_exp += s[i]
     print(new_exp)
     new_exp = new_exp.split(" ");
-    
-    # remove empty elements
+    print("new_exp")
+    print(new_exp)
+   
     list_of_elements = []
     for i in range(len(new_exp)):
+        # remove function name
+        if new_exp[i] is not token and i + 1 <  len(new_exp) and new_exp[i + 1] == '(':
+            print(new_exp[i])
+            print(new_exp[i+1])
+            continue
+        # remove empty elements
         if new_exp[i] != '':
             list_of_elements.append(new_exp[i])
     for i in range(len(list_of_elements)):
         v = dict_of_array.get(list_of_elements[i], -1)
         if v != -1:
             list_of_elements[i] = v
+    print(list_of_elements)
     return list_of_elements
 
 #epxression_to_postprefix function
@@ -158,7 +188,7 @@ def expression_to_posprefix(list_of_elements):
     # p is a list that contain result
     p = []
     #the priority of operators
-    operator_precedence = { '!=':1, '*': 2, '/':2, '%': 2, '+':3, '-': 3, '<<':4, '>>':4, '&':5, '^':6, '|':7}
+    operator_precedence = { '!=':1, '==': 1,'*': 2, '/':2, '%': 2, '+':3, '-': 3, '<<':4, '>>':4, '&':5, '^':6, '|':7}
     # if element is a token and different from ')'
         # if it is not an operator, it means it is a '(' symbol -> push it to stack
         # if it is an operator, before pushing it to stack we need to pop all of the operators that has
@@ -310,6 +340,25 @@ def int33_generate_annotation(tree):
         annotation += int33_generate_annotation(tree.right)
     return annotation
 
+#int32_generate_annotation function
+#int32: Ensure that operations on signed integers do not result in overflow
+#generate annotation according to rule int 32
+#input: Tree
+#output: string
+#notes: Rosecheckers only checks unary negation case so this function just 
+#generate annotation for that case
+def int32_generate_annotation(tree):
+    annotation = ""
+    #if node is a '-' operator and it has only right child
+    if tree.value == '-' and tree.left == None and tree.right != None:
+        annotation += "/*@ assert " + tree.right.inorder_travel() + " > -2147483648;\n */"
+    if tree.left != None:
+        annotation += int32_generate_annotation(tree.left)
+    if tree.right != None:
+        annotation += int32_generate_annotation(tree.right)
+    return annotation    
+
+    
 #int34_generate_annotation function
 #int34: Do not shift an expression by a negative number of bits or by greater than
 #or equal to the number of bits than exits in the operand
@@ -412,6 +461,11 @@ def read_output_of_rosecheckers(rosecheckers_output_file_name):
                                 list_values.append(d)
                                 list_of_violations[target_file] = list_values
     return list_of_violations
+#genertate_annotation function
+#input: 
+#output
+#generate annotation for expression s
+def generate_annotation(file, s):    
 
 #write_annotations_to_file function
 #input:
@@ -458,46 +512,53 @@ def write_annotations_to_file(list_of_violations, source):
                             s = line
                         else:
                             s = line
-                        print(s)
                         #s is expression that need to be generated annotation
-                        pre_processed = pre_processing(s)
-                        print(pre_processed)
-                        post_prefix_expression = expression_to_posprefix(pre_processed)
-                        expression_tree = postprefix_to_expression_tree(post_prefix_expression)
-                        #decide which rule to generate annotation for s 
-                        values = dicts.get(k, -1)
-                        for v in values:
-                            v = v.replace('-C','').lower()
-                            if v in list_of_rules:
-                                annotation = eval(v + "_generate_annotation(expression_tree)")
-                                generated_file.write(annotation)
-                        if (contain_array(s)):
-                            dict_of_array = dictionary_of_array(s)
-                            for kArray in dict_of_array:
-                                vArray = dict_of_array.get(kArray)
-                                if vArray in pre_processed:
-                                    j = 0
-                                    sArray = ''
-                                    while j < len(vArray):
-                                        if vArray[j] != '[':
-                                            j += 1
-                                        else:
-                                            j += 1
-                                            break
-                                    while j < len(vArray):
-                                        if vArray[j] != ']':
-                                            sArray += vArray[j]
-                                            j += 1
-                                        else:
-                                            break
-                                    sArray = pre_processing(sArray)
-                                    sArray = expression_to_posprefix(sArray)
-                                    sArray = postprefix_to_expression_tree(sArray)
-                                    for v in values:
-                                        v = v.replace('-C','').lower()
-                                        if v in list_of_rules:
-                                            annotation = eval(v + "_generate_annotation(sArray)")
-                                            generated_file.write(annotation)        
+                        #check if s is a function call or not
+                        #if s is a function call, get all paramenter of that 
+                        #function and consider each as an expression
+                        if (is_a_function_call(s) != ''):
+                            s = s.replace(b,'')
+                            s = s[1: len(s)-2]
+                            s = s.split(',')
+                        else:   
+                            
+                            pre_processed = pre_processing(s)
+                            post_prefix_expression = expression_to_posprefix(pre_processed)
+                            expression_tree = postprefix_to_expression_tree(post_prefix_expression)
+                            #decide which rule to generate annotation for s 
+                            values = dicts.get(k, -1)
+                            for v in values:
+                                v = v.replace('-C','').lower()
+                                if v in list_of_rules:
+                                    annotation = eval(v + "_generate_annotation(expression_tree)")
+                                    generated_file.write(annotation)
+                            if (contain_array(s)):
+                                dict_of_array = dictionary_of_array(s)
+                                for kArray in dict_of_array:
+                                    vArray = dict_of_array.get(kArray)
+                                    if vArray in pre_processed:
+                                        j = 0
+                                        sArray = ''
+                                        while j < len(vArray):
+                                            if vArray[j] != '[':
+                                                j += 1
+                                            else:
+                                                j += 1
+                                                break
+                                        while j < len(vArray):
+                                            if vArray[j] != ']':
+                                                sArray += vArray[j]
+                                                j += 1
+                                            else:
+                                                break
+                                        sArray = pre_processing(sArray)
+                                        sArray = expression_to_posprefix(sArray)
+                                        sArray = postprefix_to_expression_tree(sArray)
+                                        for v in values:
+                                            v = v.replace('-C','').lower()
+                                            if v in list_of_rules:
+                                                annotation = eval(v + "_generate_annotation(sArray)")
+                                                generated_file.write(annotation)        
                         flag = False
                         break
                     elif int(k) > num_of_line:
@@ -513,10 +574,13 @@ def write_annotations_to_file(list_of_violations, source):
 #main
 rosecheckers_output_file_name = "C:/Users/nguye/Google Drive/JAIST/Project/code/rosecheckers_output.txt"        
 source = "C:/Users/nguye/Google Drive/JAIST/Project/code/atk2-sc1_arm/"        
-list_of_violations = read_output_of_rosecheckers(rosecheckers_output_file_name)
-write_annotations_to_file(list_of_violations, source)
-s = "start &= ~(line_len - 1)";
-s = pre_processing(s)
+#list_of_violations = read_output_of_rosecheckers(rosecheckers_output_file_name)
+#write_annotations_to_file(list_of_violations, source)
+s = "convert((uintptr) (-val), 10U, raddec,width, TRUE, padzero, outputc);"
+b = is_a_function_call(s)
+print(b)
+s = s.replace(b,'')
+s = s[1: len(s)-2]
+s = s.split(',')
 print(s)
-s = expression_to_posprefix(s)
-print(s)
+print(b)
