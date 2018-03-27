@@ -11,7 +11,7 @@ token = [' ', '~', '+', '-', '*', '/', '%', '&', '|', '>', '>', '^', '(', ')', '
 #list of biswise operators
 bitwise_token = ['~', '&', '|', '>>', '<<']
 #list of rules which has function for generating annotation
-list_of_rules = ['int13', 'int33', 'int34']
+list_of_rules = ['int13', 'int33', 'int32', 'int34']
 
 #is_a_function_call
 #input: String s
@@ -20,7 +20,7 @@ list_of_rules = ['int13', 'int33', 'int34']
 def is_a_function_call(s):
     function_name = ''
     for i in range(len(s)):
-        print(s[i])
+        #print(s[i])
         if s[i] == '(':
             break
         elif s[i] != ' ' and s[i] in token:
@@ -82,19 +82,9 @@ def dictionary_of_array(s):
 def pre_processing(s):
     print(s)
     #remove some special characters from string
-    s = s.replace('\n', ' ')
-    s = s.replace('\t', ' ')
-    s = s.replace('{', ' ')
-    s = s.replace('}', ' ')
-    s = s.replace('if', ' ')
-    s = s.replace('while', ' ')
-    s = s.replace(';', ' ')
-    s = s.replace('signed', '')
-    s = s.replace('unsigned', '')
-    s = s.replace('uintptr','')
-    s = s.replace('sintptr', '')
-    s = s.replace('int', '')
-    s = s.replace('long', '')
+    list_of_special_characters = ['\n', '\t', '{', '}', 'if', 'while', ';', 'signed', 'unsigned', 'uintptr', 'sintptr', 'int', 'long']
+    for i in range(len(list_of_special_characters)):
+        s = s.replace(list_of_special_characters[i], '')
     dict_of_array = {}
     if(contain_array(s) == True):
         dict_of_array = dictionary_of_array(s)
@@ -154,17 +144,17 @@ def pre_processing(s):
                     new_exp += " "
         else:
             new_exp += s[i]
-    print(new_exp)
+   #print(new_exp)
     new_exp = new_exp.split(" ");
-    print("new_exp")
-    print(new_exp)
+    #print("new_exp")
+    #print(new_exp)
    
     list_of_elements = []
     for i in range(len(new_exp)):
         # remove function name
         if new_exp[i] is not token and i + 1 <  len(new_exp) and new_exp[i + 1] == '(':
-            print(new_exp[i])
-            print(new_exp[i+1])
+            #print(new_exp[i])
+            #print(new_exp[i+1])
             continue
         # remove empty elements
         if new_exp[i] != '':
@@ -173,7 +163,7 @@ def pre_processing(s):
         v = dict_of_array.get(list_of_elements[i], -1)
         if v != -1:
             list_of_elements[i] = v
-    print(list_of_elements)
+    #print(list_of_elements)
     return list_of_elements
 
 #epxression_to_postprefix function
@@ -348,10 +338,11 @@ def int33_generate_annotation(tree):
 #notes: Rosecheckers only checks unary negation case so this function just 
 #generate annotation for that case
 def int32_generate_annotation(tree):
+    print("int32 - function")
     annotation = ""
     #if node is a '-' operator and it has only right child
     if tree.value == '-' and tree.left == None and tree.right != None:
-        annotation += "/*@ assert " + tree.right.inorder_travel() + " > -2147483648;\n */"
+        annotation += "/*@ assert " + tree.right.inorder_travel() + " > -2147483648;*/ \n"
     if tree.left != None:
         annotation += int32_generate_annotation(tree.left)
     if tree.right != None:
@@ -463,9 +454,57 @@ def read_output_of_rosecheckers(rosecheckers_output_file_name):
     return list_of_violations
 #genertate_annotation function
 #input: 
-#output
+#       file: write annotation into this file
+#       key: position (line number)
+#       value: list of rules that line violated
+#       s: expression    
+#output: void
 #generate annotation for expression s
-def generate_annotation(file, s):    
+def generate_annotation(file, key, value, s):    
+    print ("genreated function")
+    pre_processed = pre_processing(s)
+    print("pre")
+    print (pre_processed)
+    post_prefix_expression = expression_to_posprefix(pre_processed)
+    expression_tree = postprefix_to_expression_tree(post_prefix_expression)
+    #decide which rule to generate annotation for s 
+    #values = dicts.get(key, -1)
+    for v in value:
+        v = v.replace('-C','').lower()
+        print("rule")
+        print (v)
+        if v in list_of_rules:
+            annotation = eval(v + "_generate_annotation(expression_tree)")
+            file.write(annotation)
+    if (contain_array(s)):
+        dict_of_array = dictionary_of_array(s)
+        for kArray in dict_of_array:
+            vArray = dict_of_array.get(kArray)
+            if vArray in pre_processed:
+                j = 0
+                sArray = ''
+                while j < len(vArray):
+                    if vArray[j] != '[':
+                        j += 1
+                    else:
+                        j += 1
+                        break
+                while j < len(vArray):
+                    if vArray[j] != ']':
+                        sArray += vArray[j]
+                        j += 1
+                    else:
+                        break
+                sArray = pre_processing(sArray)
+                sArray = expression_to_posprefix(sArray)
+                sArray = postprefix_to_expression_tree(sArray)
+                for v in value:
+                    v = v.replace('-C','').lower()
+                    if v in list_of_rules:
+                        print("rule")
+                        print(v)
+                        annotation = eval(v + "_generate_annotation(sArray)")
+                        file.write(annotation)        
 
 #write_annotations_to_file function
 #input:
@@ -491,6 +530,8 @@ def write_annotations_to_file(list_of_violations, source):
             #with each violation
             for i in range(len(violation_positions)):
                 dicts = violation_positions[i]
+                print("dict")
+                print(dicts)
                 flag = True
                 for k in dicts:
                     #if violated line equals to current line (line is being read)
@@ -518,47 +559,16 @@ def write_annotations_to_file(list_of_violations, source):
                         #function and consider each as an expression
                         if (is_a_function_call(s) != ''):
                             s = s.replace(b,'')
+                            s = s.replace('\t', '')
+                            s = s.replace(' ', '')
                             s = s[1: len(s)-2]
                             s = s.split(',')
+                            print(s)
+                            for si in range(len(s)):
+                                generate_annotation(generated_file, k, dicts.get(k), s[si]) 
                         else:   
+                            generate_annotation(generated_file, k, dicts.get(k), s)
                             
-                            pre_processed = pre_processing(s)
-                            post_prefix_expression = expression_to_posprefix(pre_processed)
-                            expression_tree = postprefix_to_expression_tree(post_prefix_expression)
-                            #decide which rule to generate annotation for s 
-                            values = dicts.get(k, -1)
-                            for v in values:
-                                v = v.replace('-C','').lower()
-                                if v in list_of_rules:
-                                    annotation = eval(v + "_generate_annotation(expression_tree)")
-                                    generated_file.write(annotation)
-                            if (contain_array(s)):
-                                dict_of_array = dictionary_of_array(s)
-                                for kArray in dict_of_array:
-                                    vArray = dict_of_array.get(kArray)
-                                    if vArray in pre_processed:
-                                        j = 0
-                                        sArray = ''
-                                        while j < len(vArray):
-                                            if vArray[j] != '[':
-                                                j += 1
-                                            else:
-                                                j += 1
-                                                break
-                                        while j < len(vArray):
-                                            if vArray[j] != ']':
-                                                sArray += vArray[j]
-                                                j += 1
-                                            else:
-                                                break
-                                        sArray = pre_processing(sArray)
-                                        sArray = expression_to_posprefix(sArray)
-                                        sArray = postprefix_to_expression_tree(sArray)
-                                        for v in values:
-                                            v = v.replace('-C','').lower()
-                                            if v in list_of_rules:
-                                                annotation = eval(v + "_generate_annotation(sArray)")
-                                                generated_file.write(annotation)        
                         flag = False
                         break
                     elif int(k) > num_of_line:
@@ -574,8 +584,8 @@ def write_annotations_to_file(list_of_violations, source):
 #main
 rosecheckers_output_file_name = "C:/Users/nguye/Google Drive/JAIST/Project/code/rosecheckers_output.txt"        
 source = "C:/Users/nguye/Google Drive/JAIST/Project/code/atk2-sc1_arm/"        
-#list_of_violations = read_output_of_rosecheckers(rosecheckers_output_file_name)
-#write_annotations_to_file(list_of_violations, source)
+list_of_violations = read_output_of_rosecheckers(rosecheckers_output_file_name)
+write_annotations_to_file(list_of_violations, source)
 s = "convert((uintptr) (-val), 10U, raddec,width, TRUE, padzero, outputc);"
 b = is_a_function_call(s)
 print(b)
