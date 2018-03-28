@@ -4,369 +4,8 @@ Created on Tue Mar 13 16:56:50 2018
 
 @author: Nguyen Thu Trang
 """
-import re
-
-#list of operators 
-token = [' ', '~', '+', '-', '*', '/', '%', '&', '|', '>', '<', '^', '(', ')', '>>', '<<', '!','=', '!=', '==']
-#list of biswise operators
-bitwise_token = ['~', '&', '|', '>>', '<<']
-#list of rules which has function for generating annotation
-list_of_rules = ['int13', 'int33', 'int32', 'int34']
-
-#is_a_function_call
-#input: String s
-#output: string if string == '' it means s is not a function call 
-#check if a string is a function call or not
-def is_a_function_call(s):
-    function_name = ''
-    for i in range(len(s)):
-        if s[i] == '(':
-            break
-        elif s[i] != ' ' and s[i] in token:
-            return ''
-        elif s[i] != ' ' and s[i] != '(':
-            function_name += s[i]
-       
-    if(len(function_name) > 0):
-        return function_name
-    return ''
-    
-#contain_array function
-#input: string s
-#output: Boolean
-#check if an expression contain arrays or not 
-#for example s = A[b % c] -> return True
-def contain_array(s):
-    for i in range(len(s)):
-        if(s[i] == '['):
-            return True
-    return False
-
-#dictionary_array_function
-#input: string
-#output: dictionary
-#add all array variables of the expression into dictionary
-#for example:
-#s = A[b%c] + E[b%d]
-#dict_of_array = {'A_0':'A[b%c]', 'A_1':'E[b%d]'}    
-def dictionary_of_array(s):
-    dict_of_array = {}
-    key = 'A_'
-    index = 0
-    for i in range(len(s)):
-        if(s[i] == '['):
-            value = ''
-            j = i
-            while j >= 0:
-                if s[j] not in token:
-                    j -= 1
-                else:
-                    break
-            j += 1
-            while j < len(s) and s[j] != ']':
-                value += s[j]
-                j += 1
-            
-            value += s[j]
-            i = j
-            k = key + str(index)
-            dict_of_array[k] = value
-            index += 1
-    return dict_of_array
-
-#pre_processing function
-#input: a String
-#output: list
-#example:
-#input: s = "s = s >> 2 + 3 * 4;"
-#output: ['s', '>>', '2', '+', '3', '4']
-def pre_processing(s):
-    print(s)
-    #remove some special characters from string
-    list_of_special_characters = ['\n', '\t', '{', '}', 'if', 'while', ';', 'signed', 'unsigned', 'uintptr', 'sintptr', 'int', 'long']
-    for i in range(len(list_of_special_characters)):
-        s = s.replace(list_of_special_characters[i], '')
-    
-    dict_of_array = {}
-    if(contain_array(s) == True):
-        dict_of_array = dictionary_of_array(s)
-        for k in dict_of_array:
-            s = s.replace(dict_of_array.get(k), k)
-    if ("!=" not in s) and ("==" not in s):
-       
-        #Convert expression from a += b to a = a + b
-        operator = ["~=", ">>=", "<<=", "&=", "^=", "|=", "/="]
-        temp = []
-        op = ""
-        for i in range(len(operator)):
-            #if expression s has one of symbol in list operator
-            if operator[i] in s:
-                #split s by symbol operator[i]
-                if operator[i] == '|=':
-                    temp = re.split('\|=', s)
-                    op = operator[i]
-                else:
-                    temp = re.split(operator[i], s)
-                    op = operator[i]
-                break
-       
-        #op has form '+='     
-        if(len(temp) > 0):
-            op = re.split('=', op)
-            #for example expression a += b
-            #temp[0] = a
-            #op[0] = '+'
-            #temp[1] = b
-            s = temp[0] + op[0] + " (" + temp[1] + ")"
-        #convert expression from a = a+b to a+b (remove left side accoding to '=' operator)
-        if '=' in s:
-            temp = re.split('=', s)
-            s = temp[1]
-   
-    #conver expression from string format to list    
-    new_exp = ""
-    for i in range(len(s)):
-        if s[i] in token:
-            #case ">>", '<<', '!=', '&&', '==', '->'...
-            if (s[i] in token) and (i + 1 < len(s)) and (s[i + 1] in token) and (s[i] != ')' and s[i] != '(' and s[i+1] != ')' and s[i+1] != '('):
-                if(s[i] != '-' and s[i+1] != ' '):
-                    new_exp += " "
-                new_exp += s[i]
-                continue
-            else:
-                #adding white space before and after operator
-                if (s[i] in token) and (i - 1 >= 0) and (s[i-1] in token) and (s[i] != ')' and s[i] != '(' and s[i-1] != ')' and s[i-1] != '('):
-                    new_exp += s[i]
-                else:
-                    if i > 0 and s[i - 1] != " ":
-                        new_exp += " "
-                    new_exp += s[i]
-                if (s[i] == '>' and s[i-1] == '-'):
-                    continue
-                if (i < len(s) - 1 and s[i+1] != " "):
-                    new_exp += " "
-        else:
-            new_exp += s[i]
-    print(new_exp)
-    new_exp = new_exp.split(" ");
-   
-    list_of_elements = []
-    for i in range(len(new_exp)):
-        # remove function name
-        if new_exp[i] is not token and i + 1 <  len(new_exp) and new_exp[i + 1] == '(':
-            continue
-        # remove empty elements
-        if new_exp[i] != '':
-            list_of_elements.append(new_exp[i])
-    for i in range(len(list_of_elements)):
-        v = dict_of_array.get(list_of_elements[i], -1)
-        if v != -1:
-            list_of_elements[i] = v
-    print(list_of_elements)
-    return list_of_elements
-
-#epxression_to_postprefix function
-#convert from expression to postprefix format   
-#input: list
-#output: list
-#example:
-#input: ['s', '>>', '2', '+', '3', '*', '4']
-#output: ['s', '2', '3', '4', '*', '+', '>>']    
-def expression_to_posprefix(list_of_elements):
-    stack = []
-    # p is a list that contain result
-    p = []
-    #the priority of operators
-    operator_precedence = { '!=':1, '==': 1,'*': 2, '/':2, '%': 2, '+':3, '-': 3, '<<':4, '>>':4, '&':5, '^':6, '|':7}
-    # if element is a token and different from ')'
-        # if it is not an operator, it means it is a '(' symbol -> push it to stack
-        # if it is an operator, before pushing it to stack we need to pop all of the operators that has
-        # higher priorty and append these operators to result list (p)
-    # if element is not a token -> append to result list (p)
-    # if element is ')' -> pop from stack and append to result list until we meet '('    
-    for i in range(len(list_of_elements)):
-        if list_of_elements[i] in token and list_of_elements[i] != ')':
-            if operator_precedence.get(list_of_elements[i], 0) == 0:
-                stack.append(list_of_elements[i])
-            else:
-                while len(stack) > 0:
-                    x = stack.pop()
-                    if x != '(' and operator_precedence.get(x, 0) < operator_precedence.get(list_of_elements[i], 0):
-                        p.append(x)
-                    else:
-                        stack.append(x)
-                        break;
-                    if len(stack) == 0:
-                        break;
-                stack.append(list_of_elements[i])
-        elif list_of_elements[i] not in token:
-            p.append(list_of_elements[i])
-        else:
-            x = stack.pop()
-            while x != '(':
-                p.append(x)
-                if len(stack) > 0:
-                    x = stack.pop()
-                else:
-                    break
-    for i in range(len(stack)):
-        p.append(stack.pop())
-    return p
-
-#Class Tree
-class Tree:
-    def __init__(self, value):
-        self.value = value
-        self.left = None
-        self.right = None
-        self.bitwise_operand = False
-    #inorder_travel function
-    #left parent right
-    def inorder_travel(self):
-        #s = "("
-        s = ""
-        if self.left != None:
-            s += self.left.inorder_travel() 
-        s += str(self.value)
-        if self.right != None:
-            s += self.right.inorder_travel()
-        #s += ")"
-        return str(s)
-    #contain_operator function
-    #check whether a tree is an expression or just an operand
-    def contain_operator(self):
-        flag = False
-        if self.value in token:
-            flag = True
-        if flag == False and self.left != None:
-            flag = self.left.contain_operator()
-        if flag == False and self.right != None:
-            flag = self.right.contain_operator()
-        return flag
-#postprefix_to_expression_tree function
-#convert expression from postprefix format to tree format
-#input: list
-#output: Tree
-#example
-#input: ['s', '2', '3', '4', '*', '+', '>>']
-#output: inorder travel ((s) >> ((2) + ((3)*(4))))        
-def postprefix_to_expression_tree(p):
-    stack = []
-    #if element is not operator -> push it into stack
-    #if element is operator, make it to be a node
-        # if element is '~', it just has one operand
-            #pop one value from stack, make it to be child of current node and
-            #push current node again into stack
-        # if element is different from '~'
-            #pop two values from stack, make them to be children of current node 
-            #push current node again into stack
-    #At the end, only one element remains in stack, it will be the root of expression tree        
-    for i in range(len(p)):
-        if p[i] not in token:
-            stack.append(Tree(p[i]))
-        else:
-            parent = Tree(p[i])
-            if(p[i] == '~'):
-                if len(stack) > 0:
-                    _right = stack.pop()
-                    _right.bitwise_operand = True
-                    parent.right = _right
-            else:
-                if len(stack) > 0:
-                    _right = stack.pop()
-                    if parent.value in bitwise_token:
-                        _right.bitwise_operand = True
-                    parent.right = _right
-                if len(stack) > 0:
-                    _left = stack.pop()
-                    if parent.value in bitwise_token:
-                        _right.bitwise_operand = True
-                    parent.left = _left
-            stack.append(parent)
-    return stack.pop()
-
-#int13_generate_annotation function
-#int 13: Use bitwise operators only on unsigned operands
-#generate annotation according to rule int 13    
-#input: Tree
-#output: String
-#example: 
-#input: tree inorder travel ((s) >> ((2) + ((3)*(4))))
-#output:    /*@ assert (s) >= 0;*/
-#           /*@ assert ((2) + ( (3)* (4))) >= 0;*/    
-def int13_generate_annotation(tree):
-    print("int13")
-    annotation = "";
-    #if node is a biswise operator, generate annotation for both left and right child of it
-    print(tree.value)
-    if tree.value in bitwise_token or tree.bitwise_operand == True:
-        if tree.left != None and tree.left.contain_operator() == False:
-            s = tree.left.inorder_travel()
-            if s.isdigit() == False:
-                annotation += "/*@ assert " + s + " >= 0;*/ \n"
-        if tree.right != None and tree.right.contain_operator() == False:
-            s = tree.right.inorder_travel()
-            if s.isdigit() == False:
-                annotation += "/*@ assert " + s + " >= 0;*/ \n"
-    if tree.left != None:
-        annotation += int13_generate_annotation(tree.left)
-    if tree.right != None:
-        annotation += int13_generate_annotation(tree.right)
-    return annotation
-
-#int33_generate_annotation function
-#int33: Ensure that division and remainder operations do not result in divide-by-zero errors    
-#generate annotation according to rule int 33
-#input: Tree
-#output: String    
-def int33_generate_annotation(tree):
-    annotation = ""
-    #if node is a '/' or '%' operator, generate annotation for right child of it
-    if tree.value == '/' or tree.value == '%':
-        if tree.right != None:
-            annotation += "/*@ assert " + tree.right.inorder_travel() + " != 0;*/ \n"
-    if tree.left != None:
-        annotation += int33_generate_annotation(tree.left)
-    if tree.right != None:
-        annotation += int33_generate_annotation(tree.right)
-    return annotation
-
-#int32_generate_annotation function
-#int32: Ensure that operations on signed integers do not result in overflow
-#generate annotation according to rule int 32
-#input: Tree
-#output: string
-#notes: Rosecheckers only checks unary negation case so this function just 
-#generate annotation for that case
-def int32_generate_annotation(tree):
-    annotation = ""
-    #if node is a '-' operator and it has only right child
-    if tree.value == '-' and tree.left == None and tree.right != None:
-        annotation += "/*@ assert " + tree.right.inorder_travel() + " > -2147483648;*/ \n"
-    if tree.left != None:
-        annotation += int32_generate_annotation(tree.left)
-    if tree.right != None:
-        annotation += int32_generate_annotation(tree.right)
-    return annotation    
-
-    
-#int34_generate_annotation function
-#int34: Do not shift an expression by a negative number of bits or by greater than
-#or equal to the number of bits than exits in the operand
-#generate annotation according to rule int 34
-#input: Tree
-#output: String    
-def int34_generate_annotation(tree):
-    annotation = ""
-    #if node is "<<" or ">>" operator, generate annotation for right child of it
-    if tree.value == '<<' or tree.value == '>>':
-        if tree.right != None:
-            annotation += "/*@ assert 0 <= " + tree.right.inorder_travel() + " < 32;*/ \n"
-    if tree.left != None:
-        annotation += int34_generate_annotation(tree.left)
-    if tree.right != None:
-        annotation += int34_generate_annotation(tree.right)
-    return annotation        
+import utilities
+import int_rule
 
 #read_output_of_rosecheckers function
 #input: 
@@ -461,18 +100,18 @@ def read_output_of_rosecheckers(rosecheckers_output_file_name):
 #output: void
 #generate annotation for expression s
 def generate_annotation(file, key, value, s):    
-    pre_processed = pre_processing(s)
-    post_prefix_expression = expression_to_posprefix(pre_processed)
-    expression_tree = postprefix_to_expression_tree(post_prefix_expression)
+    pre_processed = utilities.pre_processing(s)
+    post_prefix_expression = utilities.expression_to_posprefix(pre_processed)
+    expression_tree = utilities.postprefix_to_expression_tree(post_prefix_expression)
     #decide which rule to generate annotation for s 
     #values = dicts.get(key, -1)
     for v in value:
         v = v.replace('-C','').lower()
-        if v in list_of_rules:
-            annotation = eval(v + "_generate_annotation(expression_tree)")
+        if v in utilities.list_of_rules:
+            annotation = eval("int_rule." + v + "_generate_annotation(expression_tree)")
             file.write(annotation)
-    if (contain_array(s)):
-        dict_of_array = dictionary_of_array(s)
+    if (utilities.contain_array(s)):
+        dict_of_array = utilities.dictionary_of_array(s)
         for kArray in dict_of_array:
             vArray = dict_of_array.get(kArray)
             if vArray in pre_processed:
@@ -490,13 +129,13 @@ def generate_annotation(file, key, value, s):
                         j += 1
                     else:
                         break
-                sArray = pre_processing(sArray)
-                sArray = expression_to_posprefix(sArray)
-                sArray = postprefix_to_expression_tree(sArray)
+                sArray = utilities.pre_processing(sArray)
+                sArray = utilities.expression_to_posprefix(sArray)
+                sArray = utilities.postprefix_to_expression_tree(sArray)
                 for v in value:
                     v = v.replace('-C','').lower()
-                    if v in list_of_rules:
-                        annotation = eval(v + "_generate_annotation(sArray)")
+                    if v in utilities.list_of_rules:
+                        annotation = eval("int_rule." + v + "_generate_annotation(sArray)")
                         file.write(annotation)        
 
 #write_annotations_to_file function
@@ -548,7 +187,7 @@ def write_annotations_to_file(list_of_violations, source):
                         #check if s is a function call or not
                         #if s is a function call, get all paramenter of that 
                         #function and consider each as an expression
-                        b = is_a_function_call(s)
+                        b = utilities.is_a_function_call(s)
                         if (b != ''):
                             s = s.replace(b,'')
                             s = s.replace('\t', '')
